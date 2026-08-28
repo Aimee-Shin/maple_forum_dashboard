@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>메이플스토리 포럼 Suggestions & Feedback 실시간 동향 대시보드</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (for modern UI utility classes) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    
+    <!-- WordCloud2.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.1.1/wordcloud2.min.js"></script>
+
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        mapleOrange: {
+                            DEFAULT: '#ff7a00',
+                            light: '#ffa852',
+                            dark: '#e06b00',
+                            glow: 'rgba(255, 122, 0, 0.15)'
+                        },
+                        mapleDark: {
+                            bg: '#0b0f19',
+                            card: 'rgba(17, 24, 39, 0.7)',
+                            border: 'rgba(255, 255, 255, 0.06)'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans KR', 'sans-serif'],
+                        outfit: ['Outfit', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background: radial-gradient(circle at 50% 0%, #111827 0%, #0b0f19 100%);
+            color: #f3f4f6;
+            min-height: 100vh;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism card styles */
+        .glass-card {
+            background: rgba(17, 24, 39, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(255, 122, 0, 0.25);
+            box-shadow: 0 12px 40px 0 rgba(255, 122, 0, 0.05), 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .glow-orange {
+            box-shadow: 0 0 20px 0 rgba(255, 122, 0, 0.2);
+        }
+
+        /* Category badges styling */
+        .badge {
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .badge-bug { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
+        .badge-server { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
+        .badge-balance { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.25); }
+        .badge-cashshop { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.25); }
+        .badge-system { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.25); }
+        .badge-event { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+        .badge-other { background: rgba(107, 114, 128, 0.15); color: #9ca3af; border: 1px solid rgba(107, 114, 128, 0.25); }
+
+        /* Sentiment badges */
+        .badge-positive { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-neutral { background: rgba(107, 114, 128, 0.2); color: #9ca3af; border: 1px solid rgba(107, 114, 128, 0.3); }
+        .badge-negative { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ff7a00;
+        }
+
+        /* Keyword cloud container design */
+        #wordcloud-container {
+            position: relative;
+            background: rgba(17, 24, 39, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 0.75rem;
+            width: 100%;
+            height: 250px;
+        }
+
+        #wordcloud-canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.75rem;
+            cursor: pointer;
+        }
+
+        /* Micro-animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .filter-btn-active {
+            background: #ff7a00 !important;
+            color: #ffffff !important;
+            border-color: #ff7a00 !important;
+            box-shadow: 0 0 10px rgba(255, 122, 0, 0.4);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 font-sans">
+
+    <!-- Header Area -->
+    <header class="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 glass-card p-6 border-l-4 border-l-mapleOrange">
+        <div>
+            <div class="flex items-center gap-3 mb-1">
+                <span class="bg-mapleOrange/20 text-mapleOrange px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase border border-mapleOrange/30">
+                    <i class="fa-solid fa-fire-flame-simple mr-1"></i> Live Tracker
+                </span>
+                <span class="text-xs text-gray-400 font-medium">Suggestions & Feedback</span>
+            </div>
+            <h1 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight font-outfit">
+                메이플스토리 포럼 실시간 동향 대시보드
+            </h1>
+            <p class="text-sm text-gray-400 mt-1">
+                해외 공식 포럼의 건의 사항글을 실시간 크롤링하여 AI 감정 및 카테고리 분류, 핵심 키워드 트렌드를 보여줍니다.
+            </p>
+        </div>
+        <div class="flex flex-col items-end text-right">
+            <span class="text-xs text-gray-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-clock text-mapleOrange"></i> 수집 시각: <span id="meta-run-time" class="font-semibold text-gray-200"></span>
+            </span>
+            <span class="text-xs text-gray-400 mt-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-bolt text-cyan-400"></i> 분석 모델: <span class="font-semibold text-cyan-400">Gemini 2.5 Flash</span>
+            </span>
+        </div>
+    </header>
+
+    <!-- KPI Summary Row -->
+    <section class="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <!-- Card 1: Total Posts -->
+        <div class="glass-card p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/20 text-lg">
+                <i class="fa-solid fa-list-check"></i>
+            </div>
+            <div>
+                <p class="text-xs font-semibold text-gray-400">전체 분석 게시글</p>
+                <h3 id="kpi-total-posts" class="text-2xl font-bold font-outfit text-white mt-0.5">0</h3>
+            </div>
+        </div>
+
+        <!-- Card 2: Positive Sentiment Rate -->
+        <div class="glass-card p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 text-lg">
+                <i class="fa-solid fa-face-smile"></i>
+            </div>
+            <div>
+                <p class="text-xs font-semibold text-gray-400">긍정 여론 비율</p>
+                <h3 id="kpi-positive-rate" class="text-2xl font-bold font-outfit text-emerald-400 mt-0.5">0%</h3>
+            </div>
+        </div>
+
+        <!-- Card 3: Negative Sentiment Rate -->
+        <div class="glass-card p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400 border border-red-500/20 text-lg">
+                <i class="fa-solid fa-face-frown"></i>
+            </div>
+            <div>
+                <p class="text-xs font-semibold text-gray-400">부정 여론 비율</p>
+                <h3 id="kpi-negative-rate" class="text-2xl font-bold font-outfit text-red-400 mt-0.5">0%</h3>
+            </div>
+        </div>
+
+        <!-- Card 4: Top Category -->
+        <div class="glass-card p-5 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400 border border-amber-500/20 text-lg">
+                <i class="fa-solid fa-chart-line"></i>
+            </div>
+            <div class="overflow-hidden">
+                <p class="text-xs font-semibold text-gray-400">최대 건의 분야</p>
+                <h3 id="kpi-top-category" class="text-base font-bold text-white mt-1 truncate">기타</h3>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Workspace -->
+    <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+        
+        <!-- Left Column: Controls & Word Cloud (4 cols on lg) -->
+        <div class="lg:col-span-4 flex flex-col gap-6">
+            
+            <!-- Filter Dashboard Panel -->
+            <div class="glass-card p-6 flex flex-col gap-5">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-mapleOrange"></i> 실시간 필터 설정
+                    </h3>
+                    <button id="btn-reset" onclick="resetFilters()" class="text-xs text-gray-400 hover:text-mapleOrange flex items-center gap-1 transition-colors">
+                        <i class="fa-solid fa-rotate-left"></i> 필터 초기화
+                    </button>
+                </div>
+
+                <!-- Text Search -->
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1.5">키워드/내용 검색</label>
+                    <div class="relative">
+                        <input type="text" id="search-input" oninput="applyFilters()" placeholder="게시글 검색..." 
+                               class="w-full bg-gray-900/60 border border-gray-700/60 rounded-lg py-2 pl-3 pr-9 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-mapleOrange focus:ring-1 focus:ring-mapleOrange transition-all">
+                        <i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-xs text-gray-500"></i>
+                    </div>
+                </div>
+
+                <!-- Category Selector -->
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1.5">카테고리별</label>
+                    <select id="category-select" onchange="applyFilters()" 
+                            class="w-full bg-gray-900/60 border border-gray-700/60 rounded-lg p-2.5 text-sm text-gray-200 focus:outline-none focus:border-mapleOrange transition-all">
+                        <option value="All">전체 카테고리</option>
+                        <option value="게임 오류/버그">게임 오류/버그</option>
+                        <option value="서버/접속 장애">서버/접속 장애</option>
+                        <option value="게임 밸런스">게임 밸런스</option>
+                        <option value="캐시샵/비즈니스 모델">캐시샵/비즈니스 모델</option>
+                        <option value="시스템 개선/건의">시스템 개선/건의</option>
+                        <option value="이벤트/프로모션">이벤트/프로모션</option>
+                        <option value="기타">기타</option>
+                    </select>
+                </div>
+
+                <!-- Sentiment Buttons -->
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1.5">감정 상태</label>
+                    <div class="grid grid-cols-4 gap-1.5">
+                        <button onclick="setSentimentFilter('All')" id="sent-btn-All" class="filter-btn-active bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-gray-300 hover:bg-gray-700">전체</button>
+                        <button onclick="setSentimentFilter('Positive')" id="sent-btn-Positive" class="bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-emerald-400 hover:bg-emerald-500/10">긍정</button>
+                        <button onclick="setSentimentFilter('Neutral')" id="sent-btn-Neutral" class="bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-gray-400 hover:bg-gray-500/10">중립</button>
+                        <button onclick="setSentimentFilter('Negative')" id="sent-btn-Negative" class="bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-red-400 hover:bg-red-500/10">부정</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive Word Cloud Panel -->
+            <div class="glass-card p-6 flex flex-col gap-3">
+                <h3 class="text-base font-bold text-white flex items-center justify-between">
+                    <span class="flex items-center gap-2">
+                        <i class="fa-solid fa-cloud text-cyan-400"></i> 한국어 핵심 키워드
+                    </span>
+                    <span id="active-tag-indicator" class="text-xs text-mapleOrange hidden bg-mapleOrange/10 border border-mapleOrange/30 px-2 py-0.5 rounded-md">
+                        필터링 켜짐
+                    </span>
+                </h3>
+                <p class="text-xs text-gray-400 -mt-1">
+                    빈출 단어를 클릭하여 대시보드 리스트를 빠르게 필터링해 보세요.
+                </p>
+                <div id="wordcloud-container">
+                    <canvas id="wordcloud-canvas"></canvas>
+                </div>
+                <div id="wordcloud-fallback" class="hidden text-center text-sm text-gray-500 py-12">
+                    추출된 한국어 키워드가 없습니다.
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Interactive Charts (8 cols on lg) -->
+        <div class="lg:col-span-8 flex flex-col gap-6">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Chart 1: Category Distribution -->
+                <div class="glass-card p-6 flex flex-col h-[380px]">
+                    <h3 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-indigo-400"></i> 카테고리별 건수
+                    </h3>
+                    <div id="chart-categories" class="flex-1 w-full h-full"></div>
+                </div>
+
+                <!-- Chart 2: Sentiment Distribution -->
+                <div class="glass-card p-6 flex flex-col h-[380px]">
+                    <h3 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-emerald-400"></i> 감정 상태 비율
+                    </h3>
+                    <div id="chart-sentiment" class="flex-1 w-full h-full"></div>
+                </div>
+            </div>
+
+            <!-- Stats/Help Information Banner -->
+            <div class="glass-card p-4 bg-gradient-to-r from-mapleOrange/10 via-indigo-950/20 to-transparent border-l-2 border-l-mapleOrange flex items-center gap-3">
+                <i class="fa-solid fa-circle-info text-mapleOrange text-lg"></i>
+                <p class="text-xs text-gray-300">
+                    <strong class="text-white">팁:</strong> Plotly 차트 범례를 더블클릭하면 해당 항목만 분리해서 보실 수 있으며, 차트 조각 클릭 필터링과 워드클라우드 클릭 필터링은 동시에 조작할 수 있습니다.
+                </p>
+            </div>
+            
+        </div>
+
+    </main>
+
+    <!-- Forum Post List Row -->
+    <section class="max-w-7xl mx-auto glass-card p-6 mb-8">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-list text-mapleOrange"></i> 피드백 게시글 목록 
+                    <span id="filtered-count-badge" class="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full ml-1">0 / 0</span>
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">AI 번역 요약 및 분류 정보가 포함된 스레드 목록입니다. 링크를 클릭하면 공식 포럼으로 이동합니다.</p>
+            </div>
+            
+            <div class="flex items-center gap-2 self-start md:self-auto">
+                <span class="text-xs text-gray-400">정렬 기준:</span>
+                <select id="sort-select" onchange="applyFilters()" 
+                        class="bg-gray-900 border border-gray-700/60 rounded-md py-1 px-2.5 text-xs text-gray-300 focus:outline-none focus:border-mapleOrange">
+                    <option value="default">포럼 기본 순서</option>
+                    <option value="category">카테고리순</option>
+                    <option value="sentiment">감정순</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Post list Container -->
+        <div id="posts-container" class="space-y-4">
+            <!-- Dynamic elements will be inserted here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-center">
+            <div class="w-16 h-16 rounded-full bg-gray-800/80 flex items-center justify-center text-gray-500 text-2xl mb-4 border border-gray-700/50">
+                <i class="fa-solid fa-folder-open"></i>
+            </div>
+            <h4 class="text-base font-bold text-gray-300">검색 조건에 맞는 게시글이 없습니다</h4>
+            <p class="text-xs text-gray-500 mt-1">필터 조건을 재조정하거나 필터 초기화 버튼을 눌러보세요.</p>
+            <button onclick="resetFilters()" class="mt-4 bg-mapleOrange hover:bg-mapleOrange-dark text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-lg shadow-mapleOrange/20">
+                필터 해제
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="max-w-7xl mx-auto text-center py-8 border-t border-gray-800/80 mt-12 text-xs text-gray-500">
+        <p>© 2026 MapleStory Forum Sentiment Scraper & Dashboard. Generated using Google Gemini 2.5 Flash.</p>
+        <p class="mt-1">이 대시보드는 비공식 도구로, 넥슨 메이플스토리 공식 데이터를 가공하여 동향 파악을 목적으로 제작되었습니다.</p>
+    </footer>
+
+    <!-- ========================================== -->
+    <!-- DATA PLACEHOLDER & DASHBOARD JS CODE       -->
+    <!-- ========================================== -->
+    <script>
+        // 이 부분은 Python 스크립트에서 JSON 데이터를 바인딩하여 대체하게 됩니다.
+        const dashboardData = /*DATA_PLACEHOLDER*/;
+
+        // Active filter states
+        let filterCategory = "All";
+        let filterSentiment = "All";
+        let filterKeyword = "";
+        let filterSearchText = "";
+
+        // Raw items
+        let allPosts = [];
+        let wordFrequencies = [];
+
+        // Set layout variables
+        const categoryColors = {
+            "게임 오류/버그": "#ef4444",
+            "서버/접속 장애": "#f59e0b",
+            "게임 밸런스": "#8b5cf6",
+            "캐시샵/비즈니스 모델": "#ec4899",
+            "시스템 개선/건의": "#06b6d4",
+            "이벤트/프로모션": "#10b981",
+            "기타": "#6b7280"
+        };
+
+        const sentimentColors = {
+            "Positive": "#10b981",
+            "Neutral": "#9ca3af",
+            "Negative": "#ef4444"
+        };
+
+        // DOM Loaded Init
+        window.addEventListener('DOMContentLoaded', () => {
+            // Load meta information
+            document.getElementById('meta-run-time').innerText = dashboardData.meta.run_time;
+            
+            allPosts = dashboardData.posts || [];
+            wordFrequencies = dashboardData.word_frequencies || [];
+            
+            // Render KPI cards
+            calculateKPIs();
+
+            // Render Charts
+            renderCharts();
+
+            // Render Word Cloud
+            renderWordCloud();
+
+            // Render Post List
+            applyFilters();
+        });
+
+        // KPI calculation
+        function calculateKPIs() {
+            const total = allPosts.length;
+            document.getElementById('kpi-total-posts').innerText = total;
+
+            if (total === 0) {
+                document.getElementById('kpi-positive-rate').innerText = '0%';
+                document.getElementById('kpi-negative-rate').innerText = '0%';
+                document.getElementById('kpi-top-category').innerText = '없음';
+                return;
+            }
+
+            const posCount = allPosts.filter(p => p.sentiment === 'Positive').length;
+            const negCount = allPosts.filter(p => p.sentiment === 'Negative').length;
+
+            const posPercent = Math.round((posCount / total) * 100);
+            const negPercent = Math.round((negCount / total) * 100);
+
+            document.getElementById('kpi-positive-rate').innerText = `${posPercent}%`;
+            document.getElementById('kpi-negative-rate').innerText = `${negPercent}%`;
+
+            // Top Category
+            const catCounts = {};
+            allPosts.forEach(p => {
+                catCounts[p.category] = (catCounts[p.category] || 0) + 1;
+            });
+            
+            let topCat = '없음';
+            let maxCount = 0;
+            for (const cat in catCounts) {
+                if (catCounts[cat] > maxCount) {
+                    maxCount = catCounts[cat];
+                    topCat = cat;
+                }
+            }
+            document.getElementById('kpi-top-category').innerText = `${topCat} (${maxCount}건)`;
+        }
+
+        // Plotly Chart Render
+        function renderCharts() {
+            if (allPosts.length === 0) return;
+
+            // 1. Category Chart Data
+            const catCounts = {};
+            const cats = ["게임 오류/버그", "서버/접속 장애", "게임 밸런스", "캐시샵/비즈니스 모델", "시스템 개선/건의", "이벤트/프로모션", "기타"];
+            cats.forEach(c => catCounts[c] = 0);
+            
+            allPosts.forEach(p => {
+                catCounts[p.category] = (catCounts[p.category] || 0) + 1;
+            });
+
+            // Filter categories with 0 count out for better display (optional, but let's keep all standard categories for uniformity)
+            const catLabels = Object.keys(catCounts);
+            const catValues = Object.values(catCounts);
+            const catColorsArray = catLabels.map(label => categoryColors[label] || '#6b7280');
+
+            const categoryTrace = {
+                x: catValues,
+                y: catLabels,
+                type: 'bar',
+                orientation: 'h',
+                marker: {
+                    color: catColorsArray,
+                    line: { width: 1.5, color: 'rgba(255, 255, 255, 0.1)' }
+                },
+                hoverinfo: 'x+y',
+                textposition: 'auto',
+            };
+
+            const categoryLayout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { l: 120, r: 20, t: 10, b: 40 },
+                xaxis: { 
+                    gridcolor: 'rgba(255, 255, 255, 0.05)', 
+                    tickfont: { color: '#9ca3af' },
+                    zeroline: false
+                },
+                yaxis: { 
+                    tickfont: { color: '#e5e7eb', size: 11, font: { weight: 'bold' } },
+                    autorange: 'reversed'
+                },
+                showlegend: false,
+                height: 300
+            };
+
+            Plotly.newPlot('chart-categories', [categoryTrace], categoryLayout, {displayModeBar: false});
+
+            // Category Click Handler
+            document.getElementById('chart-categories').on('plotly_click', function(data) {
+                const clickedCategory = data.points[0].y;
+                filterCategory = clickedCategory;
+                document.getElementById('category-select').value = clickedCategory;
+                applyFilters();
+            });
+
+            // 2. Sentiment Chart Data
+            const sentCounts = { "Positive": 0, "Neutral": 0, "Negative": 0 };
+            allPosts.forEach(p => {
+                sentCounts[p.sentiment] = (sentCounts[p.sentiment] || 0) + 1;
+            });
+
+            const sentLabels = ["Positive (긍정)", "Neutral (중립)", "Negative (부정)"];
+            const sentKeyMap = ["Positive", "Neutral", "Negative"];
+            const sentValues = sentKeyMap.map(k => sentCounts[k]);
+            const sentColorsArray = sentKeyMap.map(k => sentimentColors[k]);
+
+            const sentimentTrace = {
+                values: sentValues,
+                labels: sentLabels,
+                type: 'pie',
+                hole: 0.5,
+                marker: {
+                    colors: sentColorsArray,
+                    line: { width: 1.5, color: '#111827' }
+                },
+                textinfo: 'percent',
+                textposition: 'inside',
+                hoverinfo: 'label+value',
+                rotation: 90
+            };
+
+            const sentimentLayout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { l: 20, r: 20, t: 10, b: 10 },
+                legend: { 
+                    orientation: 'h', 
+                    x: 0.5, 
+                    y: -0.1, 
+                    xanchor: 'center', 
+                    font: { color: '#9ca3af', size: 10 } 
+                },
+                height: 300
+            };
+
+            Plotly.newPlot('chart-sentiment', [sentimentTrace], sentimentLayout, {displayModeBar: false});
+
+            // Sentiment Click Handler
+            document.getElementById('chart-sentiment').on('plotly_click', function(data) {
+                const clickedLabel = data.points[0].label; // e.g. "Positive (긍정)"
+                let key = "All";
+                if (clickedLabel.includes("Positive")) key = "Positive";
+                else if (clickedLabel.includes("Neutral")) key = "Neutral";
+                else if (clickedLabel.includes("Negative")) key = "Negative";
+
+                setSentimentFilter(key);
+            });
+        }
+
+        // WordCloud2.js Render
+        function renderWordCloud() {
+            const canvas = document.getElementById('wordcloud-canvas');
+            const container = document.getElementById('wordcloud-container');
+            const fallback = document.getElementById('wordcloud-fallback');
+
+            // Set canvas resolution size matching containers
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+
+            if (wordFrequencies.length === 0) {
+                canvas.classList.add('hidden');
+                fallback.classList.remove('hidden');
+                return;
+            }
+
+            // Word frequency dynamic scaling
+            const maxFreq = Math.max(...wordFrequencies.map(w => w[1]));
+            
+            // Adjust weights for visualization
+            const list = wordFrequencies.map(w => {
+                return [w[0], w[1]];
+            });
+
+            // Custom color palette for Wordcloud
+            const premiumColors = ['#ff7a00', '#ffa834', '#00f0ff', '#38bdf8', '#818cf8', '#a78bfa', '#f472b6', '#34d399'];
+
+            const options = {
+                list: list,
+                gridSize: Math.round(16 * canvas.width / 1024),
+                weightFactor: function (size) {
+                    const baseSize = (canvas.width > 400) ? 14 : 10;
+                    return baseSize + (size / maxFreq) * 24; // Dynamic scaling bounds 14px - 38px
+                },
+                fontFamily: 'Outfit, Noto Sans KR, sans-serif',
+                fontWeight: 'bold',
+                color: function() {
+                    return premiumColors[Math.floor(Math.random() * premiumColors.length)];
+                },
+                rotateRatio: 0, // 0 means all words are horizontal, clean to read
+                backgroundColor: 'rgba(0,0,0,0)', // transparent, container handles backdrop
+                drawOutOfBound: false,
+                shrinkToFit: true,
+                click: function(item) {
+                    filterKeyword = item[0];
+                    document.getElementById('active-tag-indicator').innerText = `키워드: ${item[0]}`;
+                    document.getElementById('active-tag-indicator').classList.remove('hidden');
+                    applyFilters();
+                }
+            };
+
+            // Trigger Word Cloud
+            WordCloud(canvas, options);
+
+            // Handle Resize
+            window.addEventListener('resize', () => {
+                canvas.width = container.offsetWidth;
+                canvas.height = container.offsetHeight;
+                WordCloud(canvas, options);
+            });
+        }
+
+        // Set sentiment button state
+        function setSentimentFilter(sentiment) {
+            filterSentiment = sentiment;
+            const buttons = ['All', 'Positive', 'Neutral', 'Negative'];
+            buttons.forEach(btn => {
+                const element = document.getElementById(`sent-btn-${btn}`);
+                if (btn === sentiment) {
+                    element.classList.add('filter-btn-active');
+                    // Reset styling to match tailwind
+                    if(btn === 'Positive') element.className = 'filter-btn-active bg-emerald-500 text-white text-xs py-2 rounded-lg font-medium transition-all shadow-md';
+                    else if(btn === 'Negative') element.className = 'filter-btn-active bg-red-500 text-white text-xs py-2 rounded-lg font-medium transition-all shadow-md';
+                    else if(btn === 'Neutral') element.className = 'filter-btn-active bg-gray-500 text-white text-xs py-2 rounded-lg font-medium transition-all shadow-md';
+                    else element.className = 'filter-btn-active bg-mapleOrange text-white text-xs py-2 rounded-lg font-medium transition-all shadow-md';
+                } else {
+                    element.classList.remove('filter-btn-active');
+                    if(btn === 'Positive') element.className = 'bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-emerald-400 hover:bg-emerald-500/10';
+                    else if(btn === 'Negative') element.className = 'bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-red-400 hover:bg-red-500/10';
+                    else if(btn === 'Neutral') element.className = 'bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-gray-400 hover:bg-gray-500/10';
+                    else element.className = 'bg-gray-800/80 border border-gray-700 text-xs py-2 rounded-lg font-medium transition-all text-gray-300 hover:bg-gray-700';
+                }
+            });
+            applyFilters();
+        }
+
+        // Reset all filters
+        function resetFilters() {
+            filterCategory = "All";
+            filterSentiment = "All";
+            filterKeyword = "";
+            filterSearchText = "";
+
+            document.getElementById('search-input').value = "";
+            document.getElementById('category-select').value = "All";
+            document.getElementById('active-tag-indicator').classList.add('hidden');
+            document.getElementById('sort-select').value = "default";
+
+            setSentimentFilter('All');
+        }
+
+        // Apply filters & render list
+        function applyFilters() {
+            filterSearchText = document.getElementById('search-input').value.toLowerCase().trim();
+            filterCategory = document.getElementById('category-select').value;
+            const sortBy = document.getElementById('sort-select').value;
+
+            // Filter posts
+            let filtered = allPosts.filter(post => {
+                // 1. Category Filter
+                if (filterCategory !== "All" && post.category !== filterCategory) return false;
+
+                // 2. Sentiment Filter
+                if (filterSentiment !== "All" && post.sentiment !== filterSentiment) return false;
+
+                // 3. Keyword Cloud Filter
+                if (filterKeyword !== "" && !post.keywords.includes(filterKeyword)) return false;
+
+                // 4. Search Text Filter (Search title, summary, content, keywords)
+                if (filterSearchText !== "") {
+                    const matchTitle = post.title.toLowerCase().includes(filterSearchText);
+                    const matchSummary = post.summary.toLowerCase().includes(filterSearchText);
+                    const matchContent = post.content ? post.content.toLowerCase().includes(filterSearchText) : false;
+                    const matchKeyword = post.keywords.some(k => k.toLowerCase().includes(filterSearchText));
+
+                    if (!matchTitle && !matchSummary && !matchContent && !matchKeyword) return false;
+                }
+
+                return true;
+            });
+
+            // Sorting logic
+            if (sortBy === 'category') {
+                filtered.sort((a, b) => a.category.localeCompare(b.category));
+            } else if (sortBy === 'sentiment') {
+                filtered.sort((a, b) => a.sentiment.localeCompare(b.sentiment));
+            }
+
+            // Update header badge count
+            document.getElementById('filtered-count-badge').innerText = `${filtered.length} / ${allPosts.length}`;
+
+            // Render post list
+            const container = document.getElementById('posts-container');
+            const emptyState = document.getElementById('empty-state');
+            container.innerHTML = '';
+
+            if (filtered.length === 0) {
+                container.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+            } else {
+                container.classList.remove('hidden');
+                emptyState.classList.add('hidden');
+
+                filtered.forEach(post => {
+                    const element = document.createElement('div');
+                    element.className = 'glass-card p-6 flex flex-col gap-4 animate-fade-in border-l-4 border-l-gray-700/50 hover:border-l-mapleOrange';
+                    
+                    // Badges mapping
+                    let catBadgeClass = 'badge-other';
+                    if (post.category === '게임 오류/버그') catBadgeClass = 'badge-bug';
+                    else if (post.category === '서버/접속 장애') catBadgeClass = 'badge-server';
+                    else if (post.category === '게임 밸런스') catBadgeClass = 'badge-balance';
+                    else if (post.category === '캐시샵/비즈니스 모델') catBadgeClass = 'badge-cashshop';
+                    else if (post.category === '시스템 개선/건의') catBadgeClass = 'badge-system';
+                    else if (post.category === '이벤트/프로모션') catBadgeClass = 'badge-event';
+
+                    const sentimentBadgeClass = post.sentiment === 'Positive' ? 'badge-positive' : 
+                                                (post.sentiment === 'Negative' ? 'badge-negative' : 'badge-neutral');
+                    
+                    const sentimentText = post.sentiment === 'Positive' ? '긍정' : 
+                                          (post.sentiment === 'Negative' ? '부정' : '중립');
+
+                    // Generate keyword tags HTML
+                    let tagsHTML = '';
+                    if (post.keywords && post.keywords.length > 0) {
+                        post.keywords.forEach(keyword => {
+                            const activeClass = (filterKeyword === keyword) ? 'bg-mapleOrange/25 border-mapleOrange text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-300';
+                            tagsHTML += `<button onclick="filterByTag('${keyword}')" class="text-xs ${activeClass} border border-gray-700 px-2 py-0.5 rounded-md transition-colors mr-1.5 mb-1.5 font-medium font-outfit"># ${keyword}</button>`;
+                        });
+                    }
+
+                    // Content preview truncation (first 250 chars)
+                    const contentTrunc = post.content ? 
+                        (post.content.length > 250 ? post.content.substring(0, 250) + '...' : post.content) 
+                        : "본문 수집 데이터가 없습니다.";
+
+                    element.innerHTML = `
+                        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800/80 pb-3">
+                            <div class="flex-1 min-w-[280px]">
+                                <a href="${post.url}" target="_blank" class="text-base font-bold text-white hover:text-mapleOrange transition-colors flex items-center gap-1.5 leading-snug">
+                                    ${post.title}
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs text-gray-500 hover:text-mapleOrange"></i>
+                                </a>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="badge ${catBadgeClass}">
+                                    <i class="fa-solid fa-tags"></i> ${post.category}
+                                </span>
+                                <span class="badge ${sentimentBadgeClass}">
+                                    <i class="fa-solid ${post.sentiment === 'Positive' ? 'fa-face-smile' : (post.sentiment === 'Negative' ? 'fa-face-frown' : 'fa-face-meh')}"></i> ${sentimentText}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                            <div class="md:col-span-5 border-r border-gray-800/50 pr-4">
+                                <div class="text-xs text-gray-400 font-semibold mb-1 flex items-center gap-1">
+                                    <i class="fa-solid fa-wand-magic-sparkles text-mapleOrange"></i> AI 요약 (국문)
+                                </div>
+                                <p class="text-sm text-gray-200 leading-relaxed font-medium bg-mapleOrange/5 border border-mapleOrange/10 rounded-lg p-3">
+                                    ${post.summary}
+                                </p>
+                            </div>
+                            <div class="md:col-span-7 flex flex-col justify-between">
+                                <div>
+                                    <div class="text-xs text-gray-400 font-semibold mb-1">포럼 원본 텍스트 발췌</div>
+                                    <p class="text-xs text-gray-400 leading-relaxed font-mono whitespace-pre-wrap select-all">
+                                        ${contentTrunc}
+                                    </p>
+                                </div>
+                                <div class="mt-3">
+                                    ${tagsHTML}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(element);
+                });
+            }
+        }
+
+        // Filtering by clicked tag badge
+        function filterByTag(tag) {
+            if (filterKeyword === tag) {
+                // Toggle off
+                filterKeyword = "";
+                document.getElementById('active-tag-indicator').classList.add('hidden');
+            } else {
+                filterKeyword = tag;
+                document.getElementById('active-tag-indicator').innerText = `키워드: ${tag}`;
+                document.getElementById('active-tag-indicator').classList.remove('hidden');
+            }
+            applyFilters();
+        }
+    </script>
+</body>
+</html>
