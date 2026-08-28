@@ -1,0 +1,39 @@
+name: Weekly MapleStory Dashboard Update
+
+on:
+  schedule:
+    # 매주 월요일 오전 0시 (한국 시간 KST) = 일요일 15:00 (UTC)
+    - cron: '0 15 * * 0'
+  workflow_dispatch: # 필요할 때 웹에서 즉시 수동 실행도 가능
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: Python 환경 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 라이브러리 설치
+        run: |
+          pip install -r requirements.txt
+
+      - name: 대시보드 크롤링 및 AI 분석 실행
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python dashboard_generator.py --pages 10
+
+      - name: 대시보드 파일 자동 커밋 및 웹사이트 배포
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add maple_forum_dashboard.html
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update MapleStory Forum Dashboard" && git push)
